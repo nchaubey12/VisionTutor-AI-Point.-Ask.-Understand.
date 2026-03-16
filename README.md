@@ -41,35 +41,35 @@ Built for the **Gemini Live Agent Challenge** — a multimodal live agent that t
 ### 1. Workflow Overview
 > End-to-end tutoring pipeline — from student pointing their webcam to receiving a step-by-step explanation with visual aid, using Gemini's multimodal capabilities.
 
-<img src="gemini-vision-tutor/docs/diagrams/01_Workflow_Overview.png" width="700"/>
+<img src="gemini-vision-tutor/docs/documents/01_Workflow_Overview.png" width="700"/>
 
 ---
 
 ### 2. System Architecture
 > Full system architecture — Next.js frontend streams webcam frames to a FastAPI backend on Cloud Run, which orchestrates multiple AI agents backed by Gemini and returns explanations in real-time.
 
-<img src="gemini-vision-tutor/docs/diagrams/02_System_Architecture.png" width="800"/>
+<img src="gemini-vision-tutor/docs/documents/02_System_Architecture.png" width="800"/>
 
 ---
 
 ### 3. LLM Orchestration & Multimodal Fusion
 > How audio and video streams are fused — vision_agent reads the homework frame, teaching_agent generates the explanation, dialogue_agent manages the conversation turn, and reasoning_agent produces the step-by-step breakdown.
 
-<img src="gemini-vision-tutor/docs/diagrams/03_LLM_Orchestration.png" width="800"/>
+<img src="gemini-vision-tutor/docs/documents/03_LLM_Orchestration.png" width="800"/>
 
 ---
 
 ### 4. Deployment Pipeline
 > From source code to Google Cloud — Terraform provisions Cloud Run, the deploy script builds and pushes the Docker image, and docker-compose enables local multi-service development.
 
-<img src="gemini-vision-tutor/docs/diagrams/04_Deployment_Pipeline.png" width="700"/>
+<img src="gemini-vision-tutor/docs/documents/04_Deployment_Pipeline.png" width="700"/>
 
 ---
 
 ### 5. Firebase Data Flow
 > How Firestore stores session data and how the backend services interact with Firebase during a tutoring session.
 
-<img src="gemini-vision-tutor/docs/diagrams/05_Firebase_Flow.png" width="700"/>
+<img src="gemini-vision-tutor/docs/documents/05_Firebase_Flow.png" width="700"/>
 
 ---
 
