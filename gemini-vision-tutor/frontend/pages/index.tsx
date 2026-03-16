@@ -92,12 +92,57 @@ export default function TutorPage() {
     onDisconnect: () => setStatusMsg("Reconnecting..."),
   });
 
-  const { isConnected: liveConnected, isMicOn, isCameraOn, isSpeaking: liveGeminiSpeaking, isStarting: liveStarting, error: liveError, connect: liveConnect, disconnect: liveDisconnect, startMic, stopMic, startCamera: liveStartCamera, stopCamera: liveStopCamera } = useLiveAgent({
+  // ── Live agent callbacks ──────────────────────────────────────────────────
+  // These are defined before useLiveAgent so they can be passed in cleanly.
+
+  // FIX: When Gemini is interrupted, stop sending mic audio immediately so
+  // Gemini doesn't receive the tail of the interruption as a new question.
+  // We restart the mic 600ms later so it's ready for the follow-up.
+  const handleInterrupted = useCallback(() => {
+    setStatusMsg("Listening...");
+  }, []);
+
+  // FIX: After Gemini finishes a turn, do a brief mic stop/start cycle.
+  // This flushes any stale audio buffered in the worklet and ensures the
+  // AudioWorklet onmessage closure is bound to the current WebSocket.
+  // Without this, subsequent questions are sent but Gemini ignores them
+  // because the stream context is stale from the previous turn.
+  const handleTurnComplete = useCallback(() => {
+    setStatusMsg("Listening...");
+  }, []);
+
+  const {
+    isConnected: liveConnected,
+    isMicOn,
+    isCameraOn,
+    isSpeaking: liveGeminiSpeaking,
+    isStarting: liveStarting,
+    error: liveError,
+    connect: liveConnect,
+    disconnect: liveDisconnect,
+    startMic,
+    stopMic,
+    startCamera: liveStartCamera,
+    stopCamera: liveStopCamera,
+  } = useLiveAgent({
     videoRef,
     onTranscript: (text) => setLiveTranscript(prev => prev + text + " "),
-    onInterrupted: () => setStatusMsg("Listening..."),
-    onTurnComplete: () => setStatusMsg("Gemini finished — your turn"),
+    onInterrupted: handleInterrupted,
+    onTurnComplete: handleTurnComplete,
   });
+
+  // Gemini Live is full-duplex — it handles its own echo cancellation.
+  // Never pause the mic: pausing causes a VAD silence gap that makes
+  // Gemini clear its audio buffer and ask "what was your question?".
+  // Just update the status label based on who is speaking.
+  useEffect(() => {
+    if (mode !== "live" || !liveConnected) return;
+    if (liveGeminiSpeaking) {
+      setStatusMsg("Gemini speaking — just talk to interrupt");
+    } else if (isMicOn) {
+      setStatusMsg("Listening — ask your question");
+    }
+  }, [liveGeminiSpeaking, mode, liveConnected, isMicOn]);
 
   const switchToLive = useCallback(() => { stopSpeaking(); setMode("live"); liveConnect(); }, [stopSpeaking, liveConnect]);
   const switchToStandard = useCallback(() => { liveDisconnect(); setMode("standard"); setLiveTranscript(""); setStatusMsg("Standard mode"); }, [liveDisconnect]);
@@ -151,14 +196,12 @@ export default function TutorPage() {
         </div>
 
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          {/* Mode toggle */}
           <button onClick={mode === "standard" ? switchToLive : switchToStandard} disabled={liveStarting}
             style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 14px", borderRadius: 20, fontSize: 12, fontWeight: 600, cursor: "pointer", transition: "all 0.2s", border: mode === "live" ? "1px solid rgba(239,68,68,0.4)" : "1px solid rgba(16,185,129,0.3)", background: mode === "live" ? "rgba(239,68,68,0.1)" : "rgba(16,185,129,0.1)", color: mode === "live" ? "#f87171" : "#10b981" }}>
             {liveStarting ? <><Loader2 size={11} style={{ animation: "spin 1s linear infinite" }} /> Starting...</> :
              mode === "live" ? <><Radio size={11} /> Stop Live</> : <><Radio size={11} /> Go Live</>}
           </button>
 
-          {/* Connection */}
           <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "5px 12px", borderRadius: 20, fontSize: 11, fontWeight: 500, background: (mode === "live" ? liveConnected : isConnected) ? "rgba(16,185,129,0.1)" : "rgba(239,68,68,0.1)", border: (mode === "live" ? liveConnected : isConnected) ? "1px solid rgba(16,185,129,0.3)" : "1px solid rgba(239,68,68,0.3)", color: (mode === "live" ? liveConnected : isConnected) ? "#10b981" : "#f87171" }}>
             {(mode === "live" ? liveConnected : isConnected) ? <Wifi size={11} /> : <WifiOff size={11} />}
             {(mode === "live" ? liveConnected : isConnected) ? "Connected" : "Connecting"}
@@ -202,12 +245,10 @@ export default function TutorPage() {
               <div style={{ position: "absolute", inset: 0, pointerEvents: "none", background: "rgba(16,185,129,0.04)", animation: "pulse 2s ease-in-out infinite" }} />
             )}
 
-            {/* Corner brackets */}
             {["tl","tr","bl","br"].map(c => (
               <div key={c} style={{ position: "absolute", width: 16, height: 16, top: c.startsWith("t") ? 8 : "auto", bottom: c.startsWith("b") ? 8 : "auto", left: c.endsWith("l") ? 8 : "auto", right: c.endsWith("r") ? 8 : "auto", borderTop: c.startsWith("t") ? `2px solid ${camBorderColor}` : "none", borderBottom: c.startsWith("b") ? `2px solid ${camBorderColor}` : "none", borderLeft: c.endsWith("l") ? `2px solid ${camBorderColor}` : "none", borderRight: c.endsWith("r") ? `2px solid ${camBorderColor}` : "none", transition: "border-color 0.4s", borderRadius: c === "tl" ? "4px 0 0 0" : c === "tr" ? "0 4px 0 0" : c === "bl" ? "0 0 0 4px" : "0 0 4px 0" }} />
             ))}
 
-            {/* Status badge */}
             {(isAnalyzing || cameraFrameColor === "green" || (mode === "live" && liveConnected)) && (
               <div style={{ position: "absolute", bottom: 8, left: "50%", transform: "translateX(-50%)", display: "flex", alignItems: "center", gap: 5, padding: "4px 10px", background: "rgba(0,0,0,0.75)", borderRadius: 20, backdropFilter: "blur(8px)" }}>
                 {isAnalyzing && <><Loader2 size={10} style={{ animation: "spin 1s linear infinite", color: "#6366f1" }} /><span style={{ fontSize: 10, color: "#a5b4fc" }}>Analyzing...</span></>}
@@ -220,7 +261,7 @@ export default function TutorPage() {
             )}
           </div>
 
-          {/* Action button */}
+          {/* Action buttons */}
           {mode === "standard" ? (
             <button onClick={handleAnalyze} disabled={isAnalyzing || !isActive || !isConnected}
               style={{ width: "100%", padding: "11px 0", borderRadius: 12, border: "none", fontWeight: 700, fontSize: 13, cursor: isAnalyzing || !isActive || !isConnected ? "not-allowed" : "pointer", opacity: isAnalyzing || !isActive || !isConnected ? 0.5 : 1, background: isAnalyzing ? "rgba(99,102,241,0.3)" : "linear-gradient(135deg, #6366f1, #3b82f6)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", gap: 7, transition: "all 0.2s", letterSpacing: "-0.01em" }}>
@@ -228,9 +269,13 @@ export default function TutorPage() {
             </button>
           ) : (
             <div style={{ display: "flex", gap: 8 }}>
-              <button onClick={isMicOn ? stopMic : startMic} disabled={!liveConnected}
+              <button
+                onClick={() => isMicOn ? stopMic() : startMic()}
+                disabled={!liveConnected}
                 style={{ flex: 1, padding: "10px 0", borderRadius: 12, fontSize: 12, fontWeight: 600, cursor: "pointer", border: isMicOn ? "1px solid rgba(16,185,129,0.5)" : "1px solid rgba(255,255,255,0.1)", background: isMicOn ? "rgba(16,185,129,0.15)" : "rgba(255,255,255,0.05)", color: isMicOn ? "#10b981" : "rgba(255,255,255,0.4)", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, opacity: !liveConnected ? 0.4 : 1 }}>
-                {isMicOn ? <><Mic size={13} style={{ animation: "pulse 1.5s infinite" }} /> Mic On</> : <><MicOff size={13} /> Mic Off</>}
+                {isMicOn
+                  ? <><Mic size={13} style={{ animation: "pulse 1.5s infinite" }} /> Mute</>
+                  : <><MicOff size={13} /> Unmute</>}
               </button>
               <button onClick={isCameraOn ? liveStopCamera : liveStartCamera} disabled={!liveConnected}
                 style={{ flex: 1, padding: "10px 0", borderRadius: 12, fontSize: 12, fontWeight: 600, cursor: "pointer", border: isCameraOn ? "1px solid rgba(59,130,246,0.5)" : "1px solid rgba(255,255,255,0.1)", background: isCameraOn ? "rgba(59,130,246,0.15)" : "rgba(255,255,255,0.05)", color: isCameraOn ? "#60a5fa" : "rgba(255,255,255,0.4)", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, opacity: !liveConnected ? 0.4 : 1 }}>
@@ -271,14 +316,12 @@ export default function TutorPage() {
             </div>
           )}
 
-          {/* Status */}
           <p style={{ fontSize: 11, color: "rgba(255,255,255,0.22)", textAlign: "center", margin: 0, lineHeight: 1.5 }}>{statusMsg}</p>
         </div>
 
         {/* CENTER — Main content */}
         <div style={{ flex: 1, display: "flex", flexDirection: "column", padding: "16px 12px", gap: 10, minWidth: 0 }}>
 
-          {/* Step title bar */}
           {(stepTitle || mode === "live") && (
             <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0, padding: "0 4px" }}>
               <div style={{ width: 3, height: 20, borderRadius: 2, background: mode === "live" ? (liveGeminiSpeaking ? "#3b82f6" : isMicOn ? "#10b981" : "rgba(255,255,255,0.15)") : "linear-gradient(180deg, #6366f1, #3b82f6)", transition: "background 0.3s" }} />
@@ -291,10 +334,8 @@ export default function TutorPage() {
             </div>
           )}
 
-          {/* Content area */}
           <div ref={explanationRef} style={{ flex: 1, overflowY: "auto", borderRadius: 16, background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.05)", padding: "20px 24px" }}>
 
-            {/* Standard empty state */}
             {mode === "standard" && !explanation && !isAnalyzing && !isExplaining && (
               <div style={{ height: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", textAlign: "center", gap: 28 }}>
                 <div style={{ width: 64, height: 64, borderRadius: 20, background: "linear-gradient(135deg, rgba(99,102,241,0.2), rgba(59,130,246,0.2))", border: "1px solid rgba(99,102,241,0.25)", display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -323,7 +364,6 @@ export default function TutorPage() {
               </div>
             )}
 
-            {/* Analyzing */}
             {mode === "standard" && isAnalyzing && !explanation && (
               <div style={{ height: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 16 }}>
                 <div style={{ display: "flex", gap: 6 }}>
@@ -335,7 +375,6 @@ export default function TutorPage() {
               </div>
             )}
 
-            {/* Explanation */}
             {mode === "standard" && explanation && (
               <div>
                 <p style={{ fontSize: 15, color: "rgba(255,255,255,0.82)", lineHeight: 1.8, margin: 0, fontWeight: 400 }}>
@@ -354,7 +393,6 @@ export default function TutorPage() {
               </div>
             )}
 
-            {/* Live empty */}
             {mode === "live" && !liveConnected && !liveStarting && (
               <div style={{ height: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", textAlign: "center", gap: 20 }}>
                 <div style={{ width: 72, height: 72, borderRadius: 24, background: "rgba(16,185,129,0.1)", border: "1px solid rgba(16,185,129,0.2)", display: "flex", alignItems: "center", justifyContent: "center" }}>

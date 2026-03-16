@@ -18,7 +18,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 export interface LiveMessage {
-  type: "connected" | "audio" | "text" | "interrupted" | "turn_complete" | "error";
+  type: "connected" | "audio" | "text" | "interrupted" | "turn_complete" | "error" | "reconnected" | "gate_reset";
   data?: string;
   text?: string;
   message?: string;
@@ -200,6 +200,8 @@ export function useLiveAgent({
       sourceRef.current      = src;
       workletNodeRef.current = workletNode;
 
+
+
       setIsMicOn(true);
       setError(null);
       console.log("[Live] Mic started (AudioWorklet)");
@@ -294,6 +296,11 @@ export function useLiveAgent({
             // Don't call stopAudio() here — let the last chunks finish.
             nextPlayTimeRef.current = 0;
             onTurnComplete?.();
+            break;
+          case "reconnected":
+            break;
+          case "gate_reset":
+            workletNodeRef.current?.port.postMessage({ type: "reset" });
             break;
           case "error":
             setError(msg.message || "Unknown error");
